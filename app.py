@@ -8,40 +8,13 @@ app = Flask(__name__)
 CORS(app)
 
 # ==============================================
-# CONFIG - @Adarsh_330
+# CONFIG
 # ==============================================
 
 DEVELOPER = "@Adarsh_330"
 OWNER = "@Adarsh_330"
 API_KEY = "@Adarsh_330"
 ORIGINAL_API = "https://mowa-endpoints.vercel.app/api/mobile"
-
-# ==============================================
-# RESPONSE MODIFIER
-# ==============================================
-
-def modify_response(data):
-    if isinstance(data, dict):
-        data.pop("developer", None)
-        data.pop("owner", None)
-        data.pop("dev", None)
-        
-        if "data" in data and isinstance(data["data"], dict):
-            data["data"].pop("developer", None)
-            data["data"].pop("owner", None)
-            data["data"].pop("dev", None)
-        
-        data["developer"] = DEVELOPER
-        data["owner"] = OWNER
-        
-        if "data" in data and isinstance(data["data"], dict):
-            data["data"]["developer"] = DEVELOPER
-            data["data"]["owner"] = OWNER
-        
-        if "timestamp" not in data:
-            data["timestamp"] = datetime.now().isoformat()
-    
-    return data
 
 # ==============================================
 # ROUTES
@@ -65,6 +38,7 @@ def mobile_info():
     key = request.args.get('key')
     query = request.args.get('query', '')
     
+    # Validate API key
     if key != API_KEY:
         return jsonify({
             "status": "error",
@@ -73,36 +47,61 @@ def mobile_info():
             "owner": OWNER
         }), 401
     
+    # Validate query
     if not query or len(query) < 2:
         return jsonify({
             "status": "error",
             "message": "Query must be at least 2 characters",
             "developer": DEVELOPER,
-            "owner": OWNER,
-            "detail": [{
-                "loc": ["query", "q"],
-                "msg": "String should have at least 2 characters",
-                "input": query,
-                "ctx": {"min_length": 2}
-            }]
+            "owner": OWNER
         }), 400
     
+    # ===== FORWARD TO ORIGINAL API =====
     try:
-        original_url = f"{ORIGINAL_API}?key={API_KEY}&query={query}"
+        original_url = f"{ORIGINAL_API}?key=bjp&query={query}"
         response = requests.get(original_url, timeout=30)
         
+        # Return original status code
         if response.status_code == 200:
             data = response.json()
-            modified_data = modify_response(data)
-            return jsonify(modified_data)
+            
+            # ONLY CHANGE: Replace developer and owner
+            if isinstance(data, dict):
+                data["developer"] = DEVELOPER
+                data["owner"] = OWNER
+                
+                if "data" in data and isinstance(data["data"], dict):
+                    if "developer" in data["data"]:
+                        data["data"]["developer"] = DEVELOPER
+                    if "owner" in data["data"]:
+                        data["data"]["owner"] = OWNER
+            
+            return jsonify(data)
         else:
+            # Return original error response
             return jsonify({
                 "status": "error",
-                "message": f"Request failed",
+                "message": f"Original API returned {response.status_code}",
                 "developer": DEVELOPER,
                 "owner": OWNER
             }), response.status_code
             
+    except requests.Timeout:
+        return jsonify({
+            "status": "error",
+            "message": "Original API timeout",
+            "developer": DEVELOPER,
+            "owner": OWNER
+        }), 504
+        
+    except requests.ConnectionError:
+        return jsonify({
+            "status": "error",
+            "message": "Cannot connect to original API",
+            "developer": DEVELOPER,
+            "owner": OWNER
+        }), 503
+        
     except Exception as e:
         return jsonify({
             "status": "error",
